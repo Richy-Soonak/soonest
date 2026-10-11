@@ -23,6 +23,7 @@
 		type Credentials
 	} from '$lib/credentials';
 	import { config } from '$lib/config';
+	import { fetchWires, type Headline } from '$lib/news';
 
 	let pillar = $state<PillarKey>('desk');
 	let content = $state('');
@@ -35,6 +36,24 @@
 	let creds = $state<Credentials | null>(null);
 	let loadedFor = $state('');
 	let drafting = $state(false);
+	let headlines = $state<Headline[]>([]);
+	let sel = $state<boolean[]>([]);
+	let newsLoading = $state(false);
+
+	async function refreshNews() {
+		newsLoading = true;
+		headlines = await fetchWires();
+		sel = headlines.map((_, i) => i < 6); // pre-tick the six freshest
+		newsLoading = false;
+	}
+
+	$effect(() => {
+		refreshNews();
+	});
+
+	function chosenWires(): string[] {
+		return headlines.filter((_, i) => sel[i]).map((h) => `- ${h.title} (${h.age} ago)`);
+	}
 
 	const maxLen = $derived(platform === 'telegram' ? 4096 : 280);
 	const over = $derived(content.length > maxLen);
@@ -153,15 +172,20 @@
 		drafting = true;
 		const system = [
 			`You are "the Minister" — the voice of the ${config.token.name} ($${config.token.symbol}) memecoin ministry.`,
-			'Tone: calm, deadpan-funny, meme-literate, radically honest. Never invent numbers; small volume and a real community are points of pride. 95% of LP is locked, never unlocking.',
+			'Tone: calm, deadpan-funny, meme-literate, radically honest. You react to real events — crypto, politics, geopolitics — and find the angle that makes people think.',
+			'Ground every claim in the provided wires; never invent facts or numbers. Small volume and a real community are points of pride. 95% of LP is locked, never unlocking.',
 			'Output ONLY the post text — no quotes, no preamble, no explanation.',
 			`Hard limit: ${maxLen} characters.`
 		].join(' ');
-		const r = await aiComplete(creds, system, `Write a ${PILLARS[pillar].label} post.`, 300);
+		const wires = chosenWires();
+		const user = wires.length
+			? `Current wires:\n${wires.join('\n')}\n\nWrite a ${PILLARS[pillar].label} post reacting to the sharpest of these. Tie it back to the $${config.token.symbol} ministry ethos.`
+			: `No wires selected — write a ${PILLARS[pillar].label} post on the general mood across crypto and world politics.`;
+		const r = await aiComplete(creds, system, user, 350);
 		drafting = false;
 		if (!r.ok) return flash(r.error, false);
 		content = content.trim() ? `${content.trim()}\n\n${r.text}` : r.text;
-		flash(`Drafted with ${r.model}.`);
+		flash(`Drafted with ${r.model}${wires.length ? ` · grounded in ${wires.length} wire${wires.length > 1 ? 's' : ''}` : ''}.`);
 	}
 </script>
 
@@ -184,7 +208,41 @@
 </header>
 
 <div class="mx-auto max-w-3xl">
-	<textarea
+	<section class="mb-4 rounded-xl border border-navy-700 bg-navy-800/30 p-4">
+	<div class="mb-2 flex items-center justify-between">
+		<h2 class="text-xs font-semibold tracking-wide text-offwhite/60 uppercase">
+			Today's wires — tick what the Minister reacts to
+		</h2>
+		<button
+			class="rounded-lg border border-navy-700 px-3 py-1 text-xs text-offwhite/60 hover:bg-navy-800 disabled:opacity-40"
+			disabled={newsLoading}
+			onclick={() => refreshNews()}
+		>
+			{newsLoading ? 'Fetching…' : '↻ refresh'}
+		</button>
+	</div>
+	{#if headlines.length === 0}
+		<p class="text-xs text-offwhite/30">
+			{newsLoading ? 'Pulling the wires…' : 'No wires loaded — hit refresh.'}
+		</p>
+	{:else}
+		<div class="grid grid-cols-2 gap-x-6 gap-y-1.5">
+			{#each headlines as h, i}
+				<label class="flex cursor-pointer items-baseline gap-2 text-xs">
+					<input type="checkbox" bind:checked={sel[i]} class="accent-cyan-glow" />
+					<span
+						class="flex-1 {h.topic === 'crypto' ? 'text-cyan-glow/90' : 'text-yellow-glow/90'}"
+					>
+						{h.title}
+					</span>
+					<span class="shrink-0 text-offwhite/30">{h.age}</span>
+				</label>
+			{/each}
+		</div>
+	{/if}
+</section>
+
+<textarea
 		bind:value={content}
 		rows="7"
 		placeholder="The Minister speaks…"
