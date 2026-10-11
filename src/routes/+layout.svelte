@@ -18,9 +18,9 @@
 	<aside class="w-56 shrink-0 border-r border-navy-700 bg-navy-800/50 p-5">
 		<div class="mb-8 flex items-center gap-3">
 			<div
-				class="relative grid h-14 w-14 place-items-center rounded-full border-2 border-cyan-glow shadow-[0_0_16px_#00e5ff55]"
+				class="relative h-14 w-14 shrink-0 overflow-hidden rounded-full border-2 border-cyan-glow shadow-[0_0_16px_#00e5ff55]"
 			>
-				<span class="font-display text-lg font-bold text-cyan-glow">RS</span>
+				<img src="/logo.png" alt="Richy Soonak" class="h-full w-full object-cover" />
 				<span class="absolute right-0 bottom-0 h-3 w-3 rounded-full bg-green-400"></span>
 			</div>
 			<div>

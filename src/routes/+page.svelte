@@ -69,7 +69,14 @@
 </script>
 
 <header class="mb-6 flex items-center justify-between">
-	<h1 class="font-display text-2xl font-bold tracking-tight">MINISTRY DESK</h1>
+	<div class="flex items-center gap-3">
+		<img
+			src="/logo.png"
+			alt="Richy Soonak"
+			class="h-10 w-10 rounded-full border border-navy-700"
+		/>
+		<h1 class="font-display text-2xl font-bold tracking-tight">MINISTRY DESK</h1>
+	</div>
 	<div class="text-xs text-offwhite/40">
 		{config.token.name} (${config.token.symbol})
 		{#if lastFetch}· updated {lastFetch.toLocaleTimeString()}{/if}
