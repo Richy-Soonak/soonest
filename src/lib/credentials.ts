@@ -17,6 +17,8 @@ export interface Credentials {
 	x_access_token: string;
 	x_access_secret: string;
 	rpc_url: string;
+	or_key: string;
+	or_model: string;
 }
 
 const EMPTY: Credentials = {
@@ -26,7 +28,9 @@ const EMPTY: Credentials = {
 	x_consumer_secret: '',
 	x_access_token: '',
 	x_access_secret: '',
-	rpc_url: ''
+	rpc_url: '',
+	or_key: '',
+	or_model: ''
 };
 
 export async function loadCreds(): Promise<Credentials> {
@@ -53,6 +57,48 @@ export function hasX(c: Credentials): boolean {
 	return [c.x_consumer_key, c.x_consumer_secret, c.x_access_token, c.x_access_secret].every(
 		(v) => v.trim() !== ''
 	);
+}
+
+// ---- AI (OpenRouter) ----------------------------------------------------------
+
+export const DEFAULT_AI_MODEL = 'openai/gpt-4o-mini';
+
+export function hasAI(c: Credentials): boolean {
+	return c.or_key.trim() !== '';
+}
+
+/** Single completion via OpenRouter chat completions. */
+export async function aiComplete(
+	c: Credentials,
+	system: string,
+	user: string,
+	maxTokens = 400
+): Promise<{ ok: true; text: string; model: string } | { ok: false; error: string }> {
+	if (!hasAI(c)) return { ok: false, error: 'No OpenRouter API key set (Settings → AI)' };
+	const model = c.or_model.trim() || DEFAULT_AI_MODEL;
+	try {
+		const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+			method: 'POST',
+			headers: {
+				'content-type': 'application/json',
+				authorization: `Bearer ${c.or_key.trim()}`
+			},
+			body: JSON.stringify({
+				model,
+				max_tokens: maxTokens,
+				messages: [
+					{ role: 'system', content: system },
+					{ role: 'user', content: user }
+				]
+			})
+		});
+		const j = await r.json();
+		if (j.error) return { ok: false, error: j.error.message ?? JSON.stringify(j.error) };
+		const text: string | undefined = j.choices?.[0]?.message?.content?.trim();
+		return text ? { ok: true, text, model } : { ok: false, error: 'Model returned nothing' };
+	} catch (e) {
+		return { ok: false, error: e instanceof Error ? e.message : String(e) };
+	}
 }
 
 /** Post via the Telegram Bot API. Returns message id on success. */

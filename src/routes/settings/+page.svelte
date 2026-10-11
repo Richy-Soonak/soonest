@@ -1,11 +1,22 @@
 <script lang="ts">
-	import { loadCreds, saveCreds, testTelegram, hasTelegram, hasX, type Credentials } from '$lib/credentials';
+	import {
+		loadCreds,
+		saveCreds,
+		testTelegram,
+		aiComplete,
+		hasTelegram,
+		hasX,
+		hasAI,
+		type Credentials
+	} from '$lib/credentials';
 
 	let creds = $state<Credentials | null>(null);
 	let saving = $state(false);
 	let savedAt = $state('');
 	let testing = $state(false);
 	let testResult = $state<{ ok: boolean; text: string } | null>(null);
+	let testingAI = $state(false);
+	let aiResult = $state<{ ok: boolean; text: string } | null>(null);
 
 	$effect(() => {
 		loadCreds().then((c) => (creds = c));
@@ -28,6 +39,21 @@
 			? { ok: true, text: `Bot ${r.bot} answered — test message sent to chat.` }
 			: { ok: false, text: r.error };
 		testing = false;
+	}
+
+	async function runAITest() {
+		if (!creds) return;
+		testingAI = true;
+		aiResult = null;
+		const r = await aiComplete(
+			creds,
+			'You are a connectivity probe. Reply with exactly: MINISTRY ONLINE',
+			'ping'
+		);
+		aiResult = r.ok
+			? { ok: true, text: `${r.model} answered: "${r.text}"` }
+			: { ok: false, text: r.error };
+		testingAI = false;
 	}
 
 	const input =
@@ -103,6 +129,38 @@
 					<input type="password" bind:value={creds.x_access_secret} class={input} />
 				</div>
 			</div>
+		</section>
+
+		<section class="rounded-xl border border-navy-700 bg-navy-800/30 p-5">
+			<h2 class="font-display mb-1 font-bold">AI (OpenRouter)</h2>
+			<p class="mb-4 text-xs text-offwhite/40">
+				One key, any model — drafts, bot replies and scorecard verdicts run through whatever you
+				pick here. {hasAI(creds)
+					? `✓ configured${creds.or_model.trim() ? ` · ${creds.or_model.trim()}` : ''}`
+					: 'not configured yet'}
+			</p>
+			<label class="block text-xs tracking-wide text-offwhite/50 uppercase">API key</label>
+			<input type="password" bind:value={creds.or_key} placeholder="sk-or-…" class={input} />
+			<label class="mt-3 block text-xs tracking-wide text-offwhite/50 uppercase">
+				Model name
+			</label>
+			<input
+				bind:value={creds.or_model}
+				placeholder="e.g. anthropic/claude-sonnet-4 — blank = openai/gpt-4o-mini"
+				class={input}
+			/>
+			<button
+				class="mt-3 rounded-lg border border-navy-700 px-4 py-1.5 text-xs text-offwhite/70 hover:bg-navy-800 disabled:opacity-40"
+				disabled={testingAI || !hasAI(creds)}
+				onclick={runAITest}
+			>
+				{testingAI ? 'Asking the model…' : 'Test AI'}
+			</button>
+			{#if aiResult}
+				<div class="mt-2 text-xs {aiResult.ok ? 'text-cyan-glow' : 'text-pink-glow'}">
+					{aiResult.text}
+				</div>
+			{/if}
 		</section>
 
 		<section class="rounded-xl border border-navy-700 bg-navy-800/30 p-5">

@@ -13,7 +13,16 @@
 		type Post,
 		type PillarKey
 	} from '$lib/db';
-	import { loadCreds, hasTelegram, hasX, sendTelegram, type Credentials } from '$lib/credentials';
+	import {
+		loadCreds,
+		hasTelegram,
+		hasX,
+		hasAI,
+		sendTelegram,
+		aiComplete,
+		type Credentials
+	} from '$lib/credentials';
+	import { config } from '$lib/config';
 
 	let pillar = $state<PillarKey>('desk');
 	let content = $state('');
@@ -25,6 +34,7 @@
 	let msgOk = $state(false);
 	let creds = $state<Credentials | null>(null);
 	let loadedFor = $state('');
+	let drafting = $state(false);
 
 	const maxLen = $derived(platform === 'telegram' ? 4096 : 280);
 	const over = $derived(content.length > maxLen);
@@ -137,6 +147,22 @@
 		if (editingId !== null) await deletePost(editingId);
 		goto('/');
 	}
+
+	async function draftAI() {
+		if (!creds) return flash('Loading settings… try again in a second.', false);
+		drafting = true;
+		const system = [
+			`You are "the Minister" — the voice of the ${config.token.name} ($${config.token.symbol}) memecoin ministry.`,
+			'Tone: calm, deadpan-funny, meme-literate, radically honest. Never invent numbers; small volume and a real community are points of pride. 95% of LP is locked, never unlocking.',
+			'Output ONLY the post text — no quotes, no preamble, no explanation.',
+			`Hard limit: ${maxLen} characters.`
+		].join(' ');
+		const r = await aiComplete(creds, system, `Write a ${PILLARS[pillar].label} post.`, 300);
+		drafting = false;
+		if (!r.ok) return flash(r.error, false);
+		content = content.trim() ? `${content.trim()}\n\n${r.text}` : r.text;
+		flash(`Drafted with ${r.model}.`);
+	}
 </script>
 
 <header class="mb-6 flex items-center justify-between">
@@ -211,6 +237,14 @@
 			onclick={postNow}
 		>
 			Post now
+		</button>
+		<button
+			class="rounded-lg border border-cyan-glow/40 px-4 py-2 text-sm text-cyan-glow hover:bg-cyan-glow/10 disabled:opacity-40"
+			disabled={drafting || !creds || !hasAI(creds)}
+			title={!creds || !hasAI(creds) ? 'Add an OpenRouter key in Settings → AI' : 'Generate a draft in the Minister\u2019s voice'}
+			onclick={draftAI}
+		>
+			{drafting ? 'Drafting…' : 'Draft with AI'}
 		</button>
 		<button
 			class="rounded-lg border border-navy-700 px-4 py-2 text-sm text-offwhite/70 hover:bg-navy-800"
