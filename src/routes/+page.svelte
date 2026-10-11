@@ -1,60 +1,78 @@
 <script lang="ts">
-	import { config } from '#lib/config';
+	import { goto } from '$app/navigation';
+	import { config } from '$lib/config';
+	import { PILLARS, postsInRange, fmtDate, type Post } from '$lib/db';
 
-	// ---- live metrics (v0: price via Jupiter lite API; holders/LP wiring next) ----
+	// ---- live metrics: Jupiter (price) + RugCheck (holders, LP lock) ----
 	let price = $state<string | null>(null);
+	let holders = $state<number | null>(null);
+	let lpPct = $state<number | null>(null);
 	let priceErr = $state('');
 	let lastFetch = $state<Date | null>(null);
 
-	async function fetchPrice() {
+	async function fetchMetrics() {
 		try {
-			const r = await fetch(
+			const j = await fetch(
 				`https://lite-api.jup.ag/price/v3?ids=${config.token.contract}`
-			);
-			if (!r.ok) throw new Error(`HTTP ${r.status}`);
-			const j = await r.json();
-			const entry = j?.[config.token.contract];
-			price = entry?.usdPrice != null ? Number(entry.usdPrice).toPrecision(4) : null;
+			).then((r) => r.json());
+			const e = j?.[config.token.contract];
+			price = e?.usdPrice != null ? Number(e.usdPrice).toPrecision(4) : null;
 			priceErr = '';
-			lastFetch = new Date();
 		} catch (e) {
 			priceErr = e instanceof Error ? e.message : String(e);
 		}
+		try {
+			const r = await fetch(
+				`https://api.rugcheck.xyz/v1/tokens/${config.token.contract}/report`
+			).then((res) => res.json());
+			holders = typeof r?.totalHolders === 'number' ? r.totalHolders : null;
+			const lps: number[] = (r?.markets ?? [])
+				.map((m: { lp?: { lpLockedPct?: number } }) => m?.lp?.lpLockedPct)
+				.filter((v: unknown): v is number => typeof v === 'number');
+			lpPct = lps.length ? Math.max(...lps) : null;
+		} catch {
+			// keep last known values; cards show '—' until first success
+		}
+		lastFetch = new Date();
 	}
 
 	$effect(() => {
-		fetchPrice();
-		const t = setInterval(fetchPrice, 30_000); // spec: metrics refresh every 30s
+		fetchMetrics();
+		const t = setInterval(fetchMetrics, 30_000); // spec: metrics every 30s
 		return () => clearInterval(t);
 	});
 
+	// ---- today's queue from SQLite ----
+	let queue = $state<Post[]>([]);
+	async function loadQueue() {
+		const today = fmtDate(new Date());
+		queue = await postsInRange(`${today}T00:00`, `${today}T23:59`);
+	}
+	$effect(() => {
+		loadQueue();
+	});
+
 	const metrics = $derived([
-		{ label: 'Price', value: price ? `$${price}` : '—', sub: priceErr || 'live · Jupiter' },
+		{
+			label: 'Price',
+			value: price ? `$${price}` : '—',
+			sub: priceErr || 'live · Jupiter'
+		},
 		{ label: 'Volume 24h', value: '$0.00', sub: 'honest — not hiding it' },
-		{ label: 'Holders', value: '—', sub: 'wiring next' },
-		{ label: 'LP Lock', value: '95% 🔒', sub: 'never unlocking' }
+		{ label: 'Holders', value: holders !== null ? String(holders) : '—', sub: 'live · RugCheck' },
+		{
+			label: 'LP Lock',
+			value: lpPct !== null ? `${lpPct}% 🔒` : '—',
+			sub: 'never unlocking'
+		}
 	]);
-
-	const queue = [
-		{ time: '09:00', pillar: "Minister's Desk", status: 'ready' },
-		{ time: '12:00', pillar: 'Meme Wars', status: 'scheduled' },
-		{ time: '18:00', pillar: 'Ministry Report', status: 'draft' }
-	];
-
-	const pillarColor: Record<string, string> = {
-		"Minister's Desk": 'text-cyan-glow',
-		'Meme Wars': 'text-pink-glow',
-		'Ministry Report': 'text-purple-glow'
-	};
 </script>
 
 <header class="mb-6 flex items-center justify-between">
 	<h1 class="font-display text-2xl font-bold tracking-tight">MINISTRY DESK</h1>
 	<div class="text-xs text-offwhite/40">
 		{config.token.name} (${config.token.symbol})
-		{#if lastFetch}
-			· updated {lastFetch.toLocaleTimeString()}
-		{/if}
+		{#if lastFetch}· updated {lastFetch.toLocaleTimeString()}{/if}
 	</div>
 </header>
 
@@ -69,26 +87,42 @@
 </section>
 
 <section class="mb-6">
-	<h2 class="mb-3 text-sm font-semibold tracking-wide text-offwhite/60 uppercase">
-		Today's Post Queue
-	</h2>
-	<div class="space-y-2">
-		{#each queue as q}
-			<div
-				class="flex items-center gap-4 rounded-lg border border-navy-700 bg-navy-800/50 px-4 py-3"
-			>
-				<span class="nums text-sm text-offwhite/50">{q.time}</span>
-				<span class="text-sm font-medium {pillarColor[q.pillar] ?? ''}">{q.pillar}</span>
-				<span
-					class="ml-auto rounded-full border border-navy-700 px-2 py-0.5 text-xs text-offwhite/60"
-				>
-					{q.status}
-				</span>
-			</div>
-		{/each}
+	<div class="mb-3 flex items-center justify-between">
+		<h2 class="text-sm font-semibold tracking-wide text-offwhite/60 uppercase">
+			Today's post queue
+		</h2>
+		<button
+			class="text-xs text-cyan-glow/70 hover:text-cyan-glow"
+			onclick={() => goto('/calendar')}
+		>
+			open calendar →
+		</button>
 	</div>
+	{#if queue.length === 0}
+		<div
+			class="rounded-lg border border-dashed border-navy-700 bg-navy-800/30 px-4 py-6 text-center text-xs text-offwhite/30"
+		>
+			Nothing scheduled today. Fill the week from templates on the Calendar.
+		</div>
+	{:else}
+		<div class="space-y-2">
+			{#each queue as p}
+				{@const meta = PILLARS[p.pillar]}
+				<button
+					class="flex w-full items-center gap-4 rounded-lg border border-navy-700 bg-navy-800/50 px-4 py-3 text-left hover:border-cyan-glow/40"
+					onclick={() => goto(`/compose?id=${p.id}`)}
+				>
+					<span class="nums text-sm text-offwhite/50">{p.scheduled_at.slice(11)}</span>
+					<span class="text-sm font-medium {meta.text}">{meta.label}</span>
+					<span class="ml-auto rounded-full border border-navy-700 px-2 py-0.5 text-xs text-offwhite/60">
+						{p.status}
+					</span>
+				</button>
+			{/each}
+		</div>
+	{/if}
 </section>
 
 <p class="text-xs text-offwhite/30">
-	Phase 1 — calendar, composer, Telegram feed and settings are next.
+	Phase 1 · price, holders and LP lock update every 30s · Telegram posting live in the Composer
 </p>
