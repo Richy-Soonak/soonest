@@ -17,7 +17,6 @@
 		loadCreds,
 		hasTelegram,
 		hasX,
-		hasAI,
 		sendTelegram,
 		aiComplete,
 		type Credentials
@@ -298,8 +297,8 @@
 		</button>
 		<button
 			class="rounded-lg border border-cyan-glow/40 px-4 py-2 text-sm text-cyan-glow hover:bg-cyan-glow/10 disabled:opacity-40"
-			disabled={drafting || !creds || !hasAI(creds)}
-			title={!creds || !hasAI(creds) ? 'Add an OpenRouter key in Settings → AI' : 'Generate a draft in the Minister\u2019s voice'}
+			disabled={drafting}
+			title="Generates a draft in the Minister's voice from the ticked wires"
 			onclick={draftAI}
 		>
 			{drafting ? 'Drafting…' : 'Draft with AI'}
