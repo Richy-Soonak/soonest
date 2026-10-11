@@ -17,6 +17,7 @@
 	let testResult = $state<{ ok: boolean; text: string } | null>(null);
 	let testingAI = $state(false);
 	let aiResult = $state<{ ok: boolean; text: string } | null>(null);
+	let saveError = $state('');
 
 	$effect(() => {
 		loadCreds().then((c) => (creds = c));
@@ -25,8 +26,18 @@
 	async function save() {
 		if (!creds) return;
 		saving = true;
-		await saveCreds(creds);
+		saveError = '';
+		const r = await saveCreds(creds);
 		saving = false;
+		if (!r.ok) {
+			saveError = r.error;
+			return;
+		}
+		const check = await loadCreds();
+		if (check.or_key !== creds.or_key.trim()) {
+			saveError = 'Write verified in store but reload mismatch — restarting the app clears this.';
+			return;
+		}
 		savedAt = new Date().toLocaleTimeString();
 	}
 
@@ -180,8 +191,13 @@
 				{saving ? 'Saving…' : 'Save credentials'}
 			</button>
 			{#if savedAt}
-				<span class="text-xs text-cyan-glow">Saved at {savedAt}</span>
+				<span class="text-xs text-cyan-glow">Saved & verified at {savedAt}</span>
 			{/if}
 		</div>
+		{#if saveError}
+			<div class="mt-3 rounded-lg border border-pink-glow/40 px-4 py-3 text-xs text-pink-glow">
+				Save failed: {saveError}
+			</div>
+		{/if}
 	</div>
 {/if}

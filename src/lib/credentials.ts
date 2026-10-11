@@ -43,10 +43,22 @@ export async function loadCreds(): Promise<Credentials> {
 	return out;
 }
 
-export async function saveCreds(c: Partial<Credentials>): Promise<void> {
-	const s = await store();
-	for (const [k, v] of Object.entries(c)) await s.set(k, v);
-	await s.save();
+export async function saveCreds(c: Partial<Credentials>): Promise<{ ok: true } | { ok: false; error: string }> {
+	try {
+		const s = await store();
+		for (const [k, v] of Object.entries(c)) await s.set(k, v);
+		await s.save();
+		// round-trip proof — don't claim victory until the store reads back
+		for (const [k, v] of Object.entries(c)) {
+			const back = await s.get(k);
+			if (back !== v) {
+				return { ok: false, error: `store did not persist "${k}" — write failed silently` };
+			}
+		}
+		return { ok: true };
+	} catch (e) {
+		return { ok: false, error: e instanceof Error ? e.message : String(e) };
+	}
 }
 
 export function hasTelegram(c: Credentials): boolean {
