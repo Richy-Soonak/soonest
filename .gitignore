@@ -1,0 +1,17 @@
+# frontend
+node_modules/
+build/
+.svelte-kit/
+vite.config.ts.timestamp-*
+
+# tauri / rust
+src-tauri/target/
+src-tauri/gen/schemas/
+
+# local state
+*.local
+.DS_Store
+
+# secrets — credentials live in the Tauri store, never in the repo
+.env
+.env.*
