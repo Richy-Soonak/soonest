@@ -194,6 +194,21 @@
 					: ' · wires panel was empty — hit ↻ refresh for grounded drafts.')
 		);
 	}
+
+let copied = $state(false);
+let copyTimer: ReturnType<typeof setTimeout> | undefined;
+
+async function copyPost() {
+	if (!content.trim()) return flash('Nothing to copy — the editor is empty.', false);
+	try {
+		await navigator.clipboard.writeText(content);
+		copied = true;
+		clearTimeout(copyTimer);
+		copyTimer = setTimeout(() => (copied = false), 1600);
+	} catch (e) {
+		flash(`Copy failed: ${e instanceof Error ? e.message : String(e)}`, false);
+	}
+}
 </script>
 
 <header class="mb-6 flex items-center justify-between">
@@ -258,9 +273,57 @@
 
 	<div class="mt-2 flex items-center justify-between text-xs">
 		<span class="text-offwhite/30">Auto-formats for X / Telegram — no rich markup needed</span>
-		<span class="nums {over ? 'text-pink-glow' : content.length > maxLen * 0.85 ? 'text-yellow-glow' : 'text-offwhite/40'}">
-			{content.length} / {maxLen} {over ? '— over limit' : '✓'}
-		</span>
+		<div class="flex items-center gap-2">
+			<button
+				class="rounded-lg border border-navy-700 p-1.5 text-offwhite/60 hover:border-cyan-glow/40 hover:text-cyan-glow disabled:opacity-30 disabled:hover:border-navy-700"
+				disabled={!content.trim()}
+				title={content.trim() ? 'Copy post to clipboard' : 'Nothing to copy'}
+				aria-label={content.trim() ? 'Copy post to clipboard' : 'Nothing to copy'}
+				onclick={copyPost}
+			>
+				{#if copied}
+					<svg
+						width="14"
+						height="14"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2.5"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						class="text-cyan-glow"
+						aria-hidden="true"
+					>
+						<polyline points="20 6 9 17 4 12" />
+					</svg>
+				{:else}
+					<svg
+						width="14"
+						height="14"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+						<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+						/>
+					</svg>
+				{/if}
+			</button>
+			<span
+				class="nums {over
+					? 'text-pink-glow'
+					: content.length > maxLen * 0.85
+						? 'text-yellow-glow'
+						: 'text-offwhite/40'}"
+			>
+				{content.length} / {maxLen} {over ? '— over limit' : '✓'}
+			</span>
+		</div>
 	</div>
 
 	<div class="mt-3 flex flex-wrap gap-2">
