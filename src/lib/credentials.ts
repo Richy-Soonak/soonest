@@ -1,13 +1,11 @@
 /**
- * Credentials — stored in a local Tauri store file (app data dir, per-user
- * permissions, never synced, never in the repo). Secrets stay on this Mac.
+ * Credentials — secrets live in the OS Keychain, non-secret config in a
+ * JSON file, both managed by the Rust `creds_load`/`creds_save` commands
+ * (src-tauri/src/secrets.rs). Nothing secret is ever written to disk in
+ * plaintext. The load/save signatures are unchanged from the store-plugin
+ * era, so routes don't need rework (issue #1).
  */
-import { Store } from '@tauri-apps/plugin-store';
-
-let storep: Promise<Store> | null = null;
-function store(): Promise<Store> {
-	return (storep ??= Store.load('credentials.json'));
-}
+import { invoke } from '@tauri-apps/api/core';
 
 export interface Credentials {
 	tg_token: string;
@@ -34,18 +32,10 @@ const EMPTY: Credentials = {
 };
 
 export async function loadCreds(): Promise<Credentials> {
-	const s = await store();
-	try {
-		// the plugin caches store state in webview memory — get() serves that cache,
-		// not the file. re-sync from disk so external edits to credentials.json
-		// (or a hand-fixed store) are actually seen by the app.
-		await s.reload();
-	} catch {
-		// older plugin builds without reload() — fall back to cached state
-	}
 	const out = { ...EMPTY };
+	const map = await invoke<Record<string, string>>('creds_load');
 	for (const k of Object.keys(EMPTY) as (keyof Credentials)[]) {
-		const v = await s.get<string>(k);
+		const v = map[k];
 		if (typeof v === 'string') out[k] = v;
 	}
 	return out;
@@ -53,13 +43,13 @@ export async function loadCreds(): Promise<Credentials> {
 
 export async function saveCreds(c: Partial<Credentials>): Promise<{ ok: true } | { ok: false; error: string }> {
 	try {
-		const s = await store();
-		for (const [k, v] of Object.entries(c)) await s.set(k, v);
-		await s.save();
-		// round-trip proof — don't claim victory until the store reads back
+		const values: Record<string, string> = {};
+		for (const [k, v] of Object.entries(c)) values[k] = v;
+		await invoke('creds_save', { values });
+		// round-trip proof — don't claim victory until the Rust side reads back
+		const map = await invoke<Record<string, string>>('creds_load');
 		for (const [k, v] of Object.entries(c)) {
-			const back = await s.get(k);
-			if (back !== v) {
+			if ((map[k] ?? '') !== v) {
 				return { ok: false, error: `store did not persist "${k}" — write failed silently` };
 			}
 		}

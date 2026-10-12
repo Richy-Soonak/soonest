@@ -74,8 +74,9 @@
 <header class="mb-6">
 	<h1 class="font-display text-2xl font-bold tracking-tight">SETTINGS</h1>
 	<p class="mt-1 text-sm text-offwhite/50">
-		Credentials are stored locally on this Mac (app-data, per-user) — never in the repo, never
-		synced.
+		Credentials are stored locally on this Mac — secrets (bot token, X keys, OpenRouter key) in
+		the <span class="text-offwhite/80">macOS Keychain, encrypted at rest</span>; everything else
+		in the app-data folder. Never in the repo, never synced.
 	</p>
 </header>
 

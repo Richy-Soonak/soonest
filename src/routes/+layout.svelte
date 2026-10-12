@@ -1,8 +1,13 @@
 <script lang="ts">
 	import '../app.css';
 	import { page } from '$app/state';
+	import { onMount } from 'svelte';
+	import { startScheduler } from '$lib/scheduler';
 
 	let { children } = $props();
+
+	// publish loop + template recurrence — runs once per app session
+	onMount(() => startScheduler());
 
 	const nav = [
 		{ label: 'Desk', href: '/' },

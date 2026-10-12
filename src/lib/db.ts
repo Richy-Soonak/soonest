@@ -51,11 +51,16 @@ export interface Post {
 	pillar: PillarKey;
 	scheduled_at: string; // 'YYYY-MM-DDTHH:mm'
 	content: string;
-	status: 'draft' | 'scheduled' | 'posted';
+	status: 'draft' | 'scheduled' | 'posted' | 'failed';
 	posted_at: string | null;
 	platform: 'x' | 'telegram' | 'both';
 	media_url: string | null;
 	created_at: string;
+	// publish-attempt bookkeeping (issue #3) — a failed publish retries on a
+	// backoff schedule instead of silently marking itself posted
+	next_attempt_at: string | null;
+	last_error: string | null;
+	attempt_count: number;
 }
 
 export interface Template {
@@ -141,8 +146,75 @@ export async function updatePost(id: number, p: Partial<Post>): Promise<void> {
 
 export async function markPosted(id: number): Promise<void> {
 	const d = await db();
-	await d.execute("UPDATE posts SET status = 'posted', posted_at = ? WHERE id = ?", [
-		new Date().toISOString(),
+	await d.execute(
+		"UPDATE posts SET status = 'posted', posted_at = ?, next_attempt_at = NULL, last_error = NULL WHERE id = ?",
+		[new Date().toISOString(), id]
+	);
+}
+
+// ---- publish attempts (issue #3) ---------------------------------------------
+
+/** Due for publish: scheduled, time reached, and backoff window elapsed. */
+export async function duePosts(nowLocal: string): Promise<Post[]> {
+	const d = await db();
+	return d.select<Post[]>(
+		`SELECT * FROM posts
+		 WHERE status = 'scheduled'
+		   AND scheduled_at <= ?
+		   AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+		 ORDER BY scheduled_at`,
+		[nowLocal, nowLocal]
+	);
+}
+
+export async function recordAttempt(
+	postId: number,
+	channel: 'telegram' | 'x',
+	ok: boolean,
+	error: string | null,
+	providerMessageId: number | null
+): Promise<void> {
+	const d = await db();
+	await d.execute(
+		'INSERT INTO publish_attempts (post_id, channel, ok, error, provider_message_id) VALUES (?, ?, ?, ?, ?)',
+		[postId, channel, ok ? 1 : 0, error, providerMessageId]
+	);
+}
+
+export async function scheduleRetry(
+	id: number,
+	attemptCount: number,
+	nextAttemptAt: string,
+	lastError: string
+): Promise<void> {
+	const d = await db();
+	await d.execute(
+		"UPDATE posts SET attempt_count = ?, next_attempt_at = ?, last_error = ?, status = 'scheduled' WHERE id = ?",
+		[attemptCount, nextAttemptAt, lastError, id]
+	);
+}
+
+export async function markFailed(id: number, lastError: string): Promise<void> {
+	const d = await db();
+	await d.execute(
+		"UPDATE posts SET status = 'failed', next_attempt_at = NULL, last_error = ? WHERE id = ?",
+		[lastError, id]
+	);
+}
+
+/** Manual retry from the UI: clear the failure state, retry on next tick. */
+export async function retryPost(id: number): Promise<void> {
+	const d = await db();
+	await d.execute(
+		"UPDATE posts SET status = 'scheduled', attempt_count = 0, next_attempt_at = NULL, last_error = NULL WHERE id = ?",
+		[id]
+	);
+}
+
+/** Editing + rescheduling a post clears its failure bookkeeping. */
+export async function resetRetryFields(id: number): Promise<void> {
+	const d = await db();
+	await d.execute('UPDATE posts SET attempt_count = 0, next_attempt_at = NULL, last_error = NULL WHERE id = ?', [
 		id
 	]);
 }

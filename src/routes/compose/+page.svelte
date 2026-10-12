@@ -5,6 +5,7 @@
 		getPost,
 		insertPost,
 		updatePost,
+		resetRetryFields,
 		markPosted,
 		deletePost,
 		PILLARS,
@@ -106,6 +107,8 @@
 	async function persist(status: Post['status']): Promise<number> {
 		if (editingId !== null) {
 			await updatePost(editingId, { pillar, content, platform, scheduled_at: scheduledAt, status });
+			// rescheduling a failed post gives it a fresh retry budget
+			await resetRetryFields(editingId);
 			return editingId;
 		}
 		return insertPost({ pillar, content, platform, scheduled_at: scheduledAt, status });

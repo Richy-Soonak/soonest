@@ -6,6 +6,12 @@ Open source, MIT. Fork it for your memecoin — all token-specific settings live
 
 Tagline: *"The Ministry Desk. On your desktop. Always open."*
 
+> **Scheduling note:** the publish scheduler runs inside the app — **the Ministry Desk must be
+> open (Mac awake) for scheduled posts to publish.** Missed publishes retry on a backoff
+> (1m → 5m → 15m → 1h → 6h, 5 attempts) and then surface as `failed` in the Calendar with a
+> retry button; every attempt is recorded in the `publish_attempts` table. A hosted
+> webhook/cron companion is the eventual fix for publish-while-closed.
+
 ## Quick start
 
 ```bash

@@ -7,6 +7,7 @@
 		insertPost,
 		listTemplates,
 		setTemplateEnabled,
+		retryPost,
 		PILLARS,
 		fmtDate,
 		startOfWeek,
@@ -54,6 +55,11 @@
 	async function toggleTemplate(t: Template, on: boolean) {
 		await setTemplateEnabled(t.id, on);
 		templates = await listTemplates();
+	}
+
+	async function doRetry(id: number) {
+		await retryPost(id);
+		await load();
 	}
 
 	async function fillWeek() {
@@ -145,8 +151,8 @@
 					{#each cell as p}
 						{@const meta = PILLARS[p.pillar]}
 						<div class="mb-1 rounded border-l-2 {meta.edge} bg-navy-900/60 px-1.5 py-1">
-							<div class="text-[10px] text-offwhite/40">
-								{p.scheduled_at.slice(11)} · {p.status}
+							<div class="text-[10px] {p.status === 'failed' ? 'text-pink-glow' : 'text-offwhite/40'}">
+								{p.scheduled_at.slice(11)} · {p.status}{p.status === 'failed' ? ' — will not retry' : ''}
 							</div>
 							<div class="truncate text-xs {meta.text}">{meta.label}</div>
 						</div>
@@ -203,13 +209,29 @@
 			<div class="space-y-2">
 				{#each offGrid as p}
 					{@const meta = PILLARS[p.pillar]}
-					<button
-						class="block w-full rounded-lg border border-navy-700 bg-navy-800/30 px-3 py-2 text-left hover:border-cyan-glow/40"
-						onclick={() => goto(`/compose?id=${p.id}`)}
-					>
-						<span class="nums text-xs text-offwhite/40">{p.scheduled_at.replace('T', ' ')}</span>
-						<span class="ml-2 text-xs {meta.text}">{meta.label}</span>
-					</button>
+					<div class="flex items-center gap-2">
+						<button
+							class="min-w-0 flex-1 rounded-lg border border-navy-700 bg-navy-800/30 px-3 py-2 text-left hover:border-cyan-glow/40"
+							onclick={() => goto(`/compose?id=${p.id}`)}
+						>
+							<span class="nums text-xs text-offwhite/40">{p.scheduled_at.replace('T', ' ')}</span>
+							<span class="ml-2 text-xs {meta.text}">{meta.label}</span>
+							{#if p.status === 'failed'}
+								<span class="ml-2 text-xs text-pink-glow" title={p.last_error ?? 'publish failed'}>
+									✗ failed{p.last_error ? `: ${p.last_error}` : ''}
+								</span>
+							{/if}
+						</button>
+						{#if p.status === 'failed'}
+							<button
+								class="shrink-0 rounded-lg border border-pink-glow/40 px-3 py-2 text-xs text-pink-glow hover:bg-pink-glow/10"
+								title="Clear the failure and retry on the next scheduler tick"
+								onclick={() => doRetry(p.id)}
+							>
+								↻ retry
+							</button>
+						{/if}
+					</div>
 				{/each}
 			</div>
 		{/if}
