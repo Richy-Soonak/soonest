@@ -84,7 +84,7 @@ export async function aiComplete(
 	c: Credentials,
 	system: string,
 	user: string,
-	maxTokens = 400
+	maxTokens = 1500
 ): Promise<{ ok: true; text: string; model: string } | { ok: false; error: string }> {
 	if (!hasAI(c)) return { ok: false, error: 'No OpenRouter API key set (Settings → AI)' };
 	const model = c.or_model.trim() || DEFAULT_AI_MODEL;
@@ -98,6 +98,8 @@ export async function aiComplete(
 			body: JSON.stringify({
 				model,
 				max_tokens: maxTokens,
+				// bound thinking where the model supports it (ignored where it doesn't)
+				reasoning: { max_tokens: Math.min(400, Math.floor(maxTokens / 4)) },
 				messages: [
 					{ role: 'system', content: system },
 					{ role: 'user', content: user }
@@ -106,8 +108,23 @@ export async function aiComplete(
 		});
 		const j = await r.json();
 		if (j.error) return { ok: false, error: j.error.message ?? JSON.stringify(j.error) };
-		const text: string | undefined = j.choices?.[0]?.message?.content?.trim();
-		return text ? { ok: true, text, model } : { ok: false, error: 'Model returned nothing' };
+		const choice = j.choices?.[0];
+		const msg = choice?.message ?? {};
+		const text: string = (msg.content ?? '').trim();
+		if (text) return { ok: true, text, model: j.model ?? model };
+		// empty content — explain WHY (reasoning models eating the budget is the usual cause)
+		const reasoning = msg.reasoning ?? msg.reasoning_content ?? '';
+		const finish = choice?.finish_reason ?? 'unknown';
+		if (finish === 'length' || reasoning) {
+			return {
+				ok: false,
+				error: `${j.model ?? model} spent its token budget thinking (finish: ${finish}) and never wrote the post. Pick a non-reasoning model in Settings (or leave the field blank for gpt-4o-mini).`
+			};
+		}
+		return {
+			ok: false,
+			error: `Model returned nothing (finish: ${finish}, HTTP ${r.status}). Try another model in Settings.`
+		};
 	} catch (e) {
 		return { ok: false, error: e instanceof Error ? e.message : String(e) };
 	}

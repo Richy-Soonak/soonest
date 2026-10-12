@@ -180,7 +180,7 @@
 		const user = wires.length
 			? `Current wires:\n${wires.join('\n')}\n\nWrite a ${PILLARS[pillar].label} post reacting to the sharpest of these. Tie it back to the $${config.token.symbol} ministry ethos.`
 			: `No wires selected — write a ${PILLARS[pillar].label} post on the general mood across crypto and world politics.`;
-		const r = await aiComplete(creds, system, user, 350);
+		const r = await aiComplete(creds, system, user, 1500);
 		drafting = false;
 		if (!r.ok) return flash(r.error, false);
 		content = content.trim() ? `${content.trim()}\n\n${r.text}` : r.text;
