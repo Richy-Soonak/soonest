@@ -87,6 +87,25 @@ export function hasAI(c: Credentials): boolean {
 	return c.or_key.trim() !== '';
 }
 
+/** Strip model meta-commentary (length notes, variants, separators) from a returned draft. */
+export function cleanDraft(text: string): string {
+	const metaPatterns = [
+		/^\d{2,4}\s*\/\s*\d{2,4}\b.*$/, // "280 / 280 ✓" style counters
+		/^\d{3,}\s*chars?\b.*$/i, // "280 chars exactly? Let me count..."
+		/let me count/i,
+		/^variant\b.*$/i,
+		/^option\s*\d.*$/i,
+		/^draft\s*\d.*$/i,
+		/^---+$/
+	];
+	return text
+		.split('\n')
+		.filter((ln) => !metaPatterns.some((re) => re.test(ln.trim())))
+		.join('\n')
+		.replace(/\n{3,}/g, '\n\n')
+		.trim();
+}
+
 /** Single completion via OpenRouter chat completions. */
 export async function aiComplete(
 	c: Credentials,

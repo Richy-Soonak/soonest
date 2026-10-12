@@ -19,6 +19,7 @@
 		hasX,
 		sendTelegram,
 		aiComplete,
+		cleanDraft,
 		type Credentials
 	} from '$lib/credentials';
 	import { config } from '$lib/config';
@@ -173,7 +174,7 @@
 			`You are "the Minister" — the voice of the ${config.token.name} ($${config.token.symbol}) memecoin ministry.`,
 			'Tone: calm, deadpan-funny, meme-literate, radically honest. You react to real events — crypto, politics, geopolitics — and find the angle that makes people think.',
 			'Ground every claim in the provided wires; never invent facts or numbers. Small volume and a real community are points of pride. 95% of LP is locked, never unlocking.',
-			'Output ONLY the post text — no quotes, no preamble, no explanation.',
+			'Output ONLY the post text as ONE single block — no quotes, no preamble, no explanation, no length notes, no drafts-of-the-draft, no variants or alternatives. Everything you output is published to real followers as-is.',
 			`Hard limit: ${maxLen} characters.`
 		].join(' ');
 		const wires = chosenWires();
@@ -183,8 +184,15 @@
 		const r = await aiComplete(creds, system, user, 1500);
 		drafting = false;
 		if (!r.ok) return flash(r.error, false);
-		content = content.trim() ? `${content.trim()}\n\n${r.text}` : r.text;
-		flash(`Drafted with ${r.model}${wires.length ? ` · grounded in ${wires.length} wire${wires.length > 1 ? 's' : ''}` : ''}.`);
+		// fresh draft REPLACES the editor — appending stacked every retry into an
+		// 828-char monster (three AI attempts glued together). One draft, one box.
+		content = cleanDraft(r.text);
+		flash(
+			`Drafted with ${r.model}` +
+				(wires.length
+					? ` · grounded in ${wires.length} wire${wires.length > 1 ? 's' : ''}.`
+					: ' · wires panel was empty — hit ↻ refresh for grounded drafts.')
+		);
 	}
 </script>
 
