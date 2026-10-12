@@ -35,6 +35,14 @@ const EMPTY: Credentials = {
 
 export async function loadCreds(): Promise<Credentials> {
 	const s = await store();
+	try {
+		// the plugin caches store state in webview memory — get() serves that cache,
+		// not the file. re-sync from disk so external edits to credentials.json
+		// (or a hand-fixed store) are actually seen by the app.
+		await s.reload();
+	} catch {
+		// older plugin builds without reload() — fall back to cached state
+	}
 	const out = { ...EMPTY };
 	for (const k of Object.keys(EMPTY) as (keyof Credentials)[]) {
 		const v = await s.get<string>(k);
